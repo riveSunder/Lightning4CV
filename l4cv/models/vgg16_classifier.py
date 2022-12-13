@@ -1,13 +1,15 @@
+import argparse
+
 import numpy as np
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import torchmetrics
 import torchvision
 import torchvision.models as tv_models
 import lightning as ptl
-
 
 class VGG16Classifier(ptl.LightningModule):
 
@@ -36,4 +38,59 @@ class VGG16Classifier(ptl.LightningModule):
         x = self.head(x) 
 
         return x
+
+    def training_step(self, batch, batch_idx):
+
+        self.optimizer.zero_grad() 
+
+        data_x, labels = batch[0], batch[1]
+        predictions =  self.forward(data_x)
+
+        loss = F.cross_entropy(predictions, labels)
+        accuracy = torch.metrics.functional.accuracy(\
+                predictions, labels.long())
+
+        self.log("train_loss", loss)
+        self.log("train_accuracy", accuracy)
+
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+
+        with torch.no_grad():
+
+            data_x, labels = batch[0], batch[1]
+            predictions =  self.forward(data_x)
+
+            loss = F.cross_entropy(predictions, labels)
+            accuracy = torch.metrics.functional.accuracy(\
+                    predictions, labels.long())
+
+            self.log("validation_loss", loss)
+            self.log("validation_accuracy", accuracy)
+
+        return loss
+
+    def configure_optimizers(self):
+
+        optimizer = torch.optim.Adam(self.parameters(), \
+                lr=self.lr)
+
+        return optimizer
+
+def train(**kwargs):
+
+    print("not implemented yet")
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("-i", "--input_folder", default="data/trees")
+
+    args = parser.parse_args()
+
+    kwargs = dict(args._get_kwargs())
+
+    train(**kwargs)
 
