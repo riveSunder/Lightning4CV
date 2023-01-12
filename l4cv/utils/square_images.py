@@ -24,15 +24,15 @@ def square_images(directory):
             my_image =  sio.imread(image_path)
 
             dim_x, dim_y = my_image.shape[0], my_image.shape[1]
-            
+
             min_dim = min([dim_x, dim_y])
 
             crop_x = (dim_x - min_dim) // 2
             crop_y = (dim_y - min_dim) // 2
 
-            if dim_x > dim_y and crop_x: 
+            if dim_x > dim_y and crop_x:
                 my_image = my_image[crop_x:-crop_x, :, ...]
-            elif crop_y: 
+            elif crop_y:
                 my_image = my_image[:, crop_y:-crop_y, ...]
 
             sio.imsave(image_path, my_image)

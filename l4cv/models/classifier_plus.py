@@ -68,11 +68,11 @@ class ClassifierPlus(VGG16Classifier):
 
         self.log("ae_loss", ae_loss)
 
-        # calculate loss statistics 
+        # calculate loss statistics
         # (exponential averaging)
         if self.ae_loss is None:
-            self.ae_loss = ae_loss.detach() 
-            self.ae_std = 0.0 
+            self.ae_loss = ae_loss.detach()
+            self.ae_std = 0.0
         else:
             alpha = self.alpha
 
@@ -81,14 +81,14 @@ class ClassifierPlus(VGG16Classifier):
             self.ae_std = (1-alpha) * self.ae_std + alpha * ae_std
             self.ae_loss = (1-alpha) * self.ae_loss + alpha * ae_loss.detach()
 
-        loss = self.dad_weight * ae_loss + classification_loss 
+        loss = self.dad_weight * ae_loss + classification_loss
         return loss
 
     def classify_and_predict(self, data_x):
 
         self.eval()
 
-        predictions = self.forward(data_x) 
+        predictions = self.forward(data_x)
         predictions = torch.softmax(predictions, dim=-1)
 
         recon = self.dad(data_x)
@@ -107,8 +107,8 @@ class ClassifierPlus(VGG16Classifier):
         anom_loss = ae_loss - ae_mean
         anom = 0.0 * anom_loss
 
-        anom[anom_loss > self.sigma * ae_std] = -1.0 
-        anom[anom_loss <= self.sigma * ae_std] = 1.0 
+        anom[anom_loss > self.sigma * ae_std] = -1.0
+        anom[anom_loss <= self.sigma * ae_std] = 1.0
 
         return predictions, anom
 
@@ -116,11 +116,10 @@ def plot_class_dad(in_tensor, out_tensor, \
         in_pred, in_anom, \
         out_pred, out_anom, \
         classes):
-    
+
     fig, ax = plt.subplots(3, 3, figsize=(8,8))
-    
+
     for ii in range(3):
-        
         my_img = out_tensor[ii].permute(1,2,0).cpu().numpy()
         label = classes[torch.argmax(out_pred[ii])]
         abnormal = "'abnormal'" if out_anom[ii] < 0 else "'normal'"
@@ -137,7 +136,7 @@ def plot_class_dad(in_tensor, out_tensor, \
             abnormal = "'abnormal'" if in_anom[idx] < 0 else "'normal'"
             ax[jj, kk].imshow(my_img)
             ax[jj, kk].set_title(f"{abnormal} image \n predicted: {label}")
-            
+
     for ll in range(3):
         for mm in range(3):
             ax[ll,mm].set_xticklabels("")
@@ -147,7 +146,7 @@ def plot_class_dad(in_tensor, out_tensor, \
     return fig
 
 def train(**kwargs):
-    
+
     my_seed = 13
 
     torch.manual_seed(13)
@@ -181,7 +180,7 @@ def train(**kwargs):
     train_dataloader = torch.utils.data.DataLoader(\
             train_dataset, batch_size=batch_size,\
             shuffle=True,\
-            num_workers=num_workers) 
+            num_workers=num_workers)
     validation_dataloader = torch.utils.data.DataLoader(validation_dataset, \
             batch_size=batch_size, \
             shuffle=True,\
@@ -190,7 +189,7 @@ def train(**kwargs):
             batch_size=batch_size*4, \
             shuffle=True,\
             num_workers=num_workers)
-    
+
     if torch.cuda.is_available() and device == "cuda":
         trainer = pl.Trainer(accelerator="gpu", \
                 devices=1, max_epochs=max_epochs)
@@ -217,7 +216,7 @@ def train(**kwargs):
     out_dataloader = torch.utils.data.DataLoader(\
             out_dataset, batch_size=32,\
             shuffle=True,\
-            num_workers=num_workers) 
+            num_workers=num_workers)
 
     for out_batch in out_dataloader:
         break
@@ -285,5 +284,3 @@ if __name__ == "__main__":
     kwargs = dict(args._get_kwargs())
 
     train(**kwargs)
-        
-   
