@@ -23,26 +23,37 @@ class ClassifierPlus(VGG16Classifier):
 
         super().__init__(number_classes=number_classes, lr=lr)
 
-        self.ch = 8
+        self.ch = 64
         self.alpha = 1e-2
         self.ae_loss = None
         self.ae_std = None
-        self.sigma = 1
+        self.sigma = 3
         self.dad_weight = 0.5
 
         # dad: deep anomaly detaction
         self.dad = nn.Sequential(\
             nn.Conv2d(3, self.ch, 3, 2, padding=1),\
+            nn.ReLU(),\
             nn.Conv2d(self.ch, self.ch, 3, 2, padding=1),\
+            nn.ReLU(),\
             nn.Conv2d(self.ch, self.ch, 3, 2, padding=1),\
+            nn.ReLU(),\
             nn.Conv2d(self.ch, self.ch, 3, 2, padding=1),\
+            nn.ReLU(),\
             nn.Conv2d(self.ch, self.ch, 3, 2, padding=1),\
+            nn.ReLU(),\
             nn.Conv2d(self.ch, self.ch, 3, 2, padding=1),\
+            nn.ReLU(),\
             nn.ConvTranspose2d(self.ch, self.ch, 2, 2, padding=0),\
+            nn.ReLU(),\
             nn.ConvTranspose2d(self.ch, self.ch, 2, 2, padding=0),\
+            nn.ReLU(),\
             nn.ConvTranspose2d(self.ch, self.ch, 2, 2, padding=0),\
+            nn.ReLU(),\
             nn.ConvTranspose2d(self.ch, self.ch, 2, 2, padding=0),\
+            nn.ReLU(),\
             nn.ConvTranspose2d(self.ch, self.ch, 2, 2, padding=0),\
+            nn.ReLU(),\
             nn.ConvTranspose2d(self.ch, 3, 2, 2, padding=0))
 
     def training_step(self, batch, batch_idx):
@@ -77,7 +88,6 @@ class ClassifierPlus(VGG16Classifier):
 
         self.eval()
 
-        import pdb; pdb.set_trace()
         predictions = self.forward(data_x) 
         predictions = torch.softmax(predictions, dim=-1)
 
@@ -138,6 +148,10 @@ def plot_class_dad(in_tensor, out_tensor, \
 
 def train(**kwargs):
     
+    my_seed = 13
+
+    torch.manual_seed(13)
+
     batch_size = kwargs["batch_size"]
     num_workers = kwargs["workers"]
     max_epochs = kwargs["max_epochs"]
@@ -173,7 +187,7 @@ def train(**kwargs):
             shuffle=True,\
             num_workers=num_workers)
     test_dataloader = torch.utils.data.DataLoader(test_dataset, \
-            batch_size=batch_size, \
+            batch_size=batch_size*4, \
             shuffle=True,\
             num_workers=num_workers)
     
@@ -201,7 +215,7 @@ def train(**kwargs):
             torchvision.transforms.Resize((128, 128))])
 
     out_dataloader = torch.utils.data.DataLoader(\
-            out_dataset, batch_size=16,\
+            out_dataset, batch_size=32,\
             shuffle=True,\
             num_workers=num_workers) 
 
@@ -222,11 +236,23 @@ def train(**kwargs):
             classes)
 
     plt.tight_layout()
-    fig.savefig("dad_ptl.png")
+    fig.savefig(f"dad_ptl_{max_epochs}.png")
 
-    plt.show()
+    #plt.show()
 
-    import pdb; pdb.set_trace()
+    in_accuracy = (1.0 * (torch.argmax(in_pred, dim=-1) == in_batch[1])).mean()
+    out_anom_tp = (1.0 * (out_anom < 0)).sum()
+    in_anom_tn = (1.0 * (in_anom > 0)).sum()
+
+    anom_accuracy = (out_anom_tp + in_anom_tn)\
+           / (in_pred.shape[0] + out_pred.shape[0])
+
+    test_msg = f"test accuracy (cats/dogs) {in_accuracy:.4f}\n"
+    test_msg += f"   true positive anomalies: {out_anom_tp}\n"
+    test_msg += f"   true negative non-anomalies: {in_anom_tn}\n"
+    test_msg += f"   anomaly accuracy: {anom_accuracy:.4f}\n"
+
+    print(test_msg)
 
 
 if __name__ == "__main__":
