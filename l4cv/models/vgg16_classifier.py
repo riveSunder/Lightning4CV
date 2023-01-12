@@ -12,12 +12,17 @@ import torchvision
 import torchvision.models as tv_models
 import lightning as pl
 
+import skimage
+import skimage.io as sio
+
 class VGG16Classifier(pl.LightningModule):
 
-    def __init__(self, number_classes=10, lr=3e-4, dropout=0.25):
+    def __init__(self, number_classes=10, lr=3e-4, dropout=0.25, pretrained=True):
         super().__init__()
         
-        self.encoder = tv_models.vgg16(weights=tv_models.VGG16_Weights.IMAGENET1K_V1).features
+        #self.encoder = tv_models.vgg16(weights=tv_models.VGG16_Weights.IMAGENET1K_V1).features
+
+        self.encoder = tv_models.vgg16(pretrained=pretrained).features
         self.num_features = 512
         self.hidden_channels = 128
         self.number_classes = number_classes
@@ -37,7 +42,14 @@ class VGG16Classifier(pl.LightningModule):
         assert x.shape[-1] >= 32, "minimum image dimensions 32x32"
         assert x.shape[-2] >= 32, "minimum image dimensions 32x32"
 
-        x = self.encoder(x).max(dim=-1)[0].max(dim=-1)[0]
+        if x.shape[1] != 3:
+            x2 = self.encoder(x[:,:3,:,:]).max(dim=-1)[0].max(dim=-1)[0]
+            for ii in range(1, x.shape[1]-3):
+                x2 += self.encoder(x[:,ii:ii+3,:,:]).max(dim=-1)[0].max(dim=-1)[0]
+            x = x2
+        else:
+            x = self.encoder(x).max(dim=-1)[0].max(dim=-1)[0]
+
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.head(x) 
 
@@ -52,7 +64,8 @@ class VGG16Classifier(pl.LightningModule):
 
         loss = F.cross_entropy(predictions, labels)
         accuracy = torchmetrics.functional.accuracy(\
-                predictions, labels.long())
+                predictions, labels.long()) #, \
+
 
         self.log("train_loss", loss)
         self.log("train_accuracy", accuracy)
@@ -68,7 +81,7 @@ class VGG16Classifier(pl.LightningModule):
 
             loss = F.cross_entropy(predictions, labels)
             accuracy = torchmetrics.functional.accuracy(\
-                    predictions, labels.long())
+                    predictions, labels.long()) #, \
 
             self.log("validation_loss", loss)
             self.log("validation_accuracy", accuracy)
@@ -87,6 +100,7 @@ def train(**kwargs):
     batch_size = kwargs["batch_size"]
     num_workers = kwargs["workers"]
     max_epochs = kwargs["max_epochs"]
+    pretrained = kwargs["pretrained"]
 
     device = "cpu" if kwargs["device"] == "cpu" else "cuda"
 
@@ -94,23 +108,32 @@ def train(**kwargs):
     validation_folder =  kwargs["input_folder"]
     test_folder =  kwargs["input_folder"]
 
-    train_dataset = torchvision.datasets.ImageFolder(input_folder)
-    validation_dataset = torchvision.datasets.ImageFolder(validation_folder)
-    test_dataset = torchvision.datasets.ImageFolder(test_folder)
+    image_loader = lambda f: np.array(sio.imread(f), dtype=np.float32)
+    train_dataset = torchvision.datasets.ImageFolder(input_folder,\
+            loader = image_loader)
+    validation_dataset = torchvision.datasets.ImageFolder(validation_folder,\
+            loader = image_loader)
+    test_dataset = torchvision.datasets.ImageFolder(test_folder,\
+            loader = image_loader)
 
-    train_dataset.transform = torchvision.transforms.ToTensor()
-    validation_dataset.transform = torchvision.transforms.ToTensor()
-    test_dataset.transform = torchvision.transforms.ToTensor()
+
+
+    my_transforms = torchvision.transforms.Compose([\
+            torchvision.transforms.ToTensor(),\
+            lambda x: x / x.max()])
+    train_dataset.transform = my_transforms
+    validation_dataset.transform = my_transforms
+    test_dataset.transform = my_transforms
 
     train_dataloader = torch.utils.data.DataLoader(\
             train_dataset, batch_size=batch_size,\
-            num_workers=num_workers) 
+            num_workers=num_workers, shuffle=True) 
     validation_dataloader = torch.utils.data.DataLoader(validation_dataset, \
             batch_size=batch_size, \
-            num_workers=num_workers)
+            num_workers=num_workers, shuffle=True )
     test_dataloader = torch.utils.data.DataLoader(test_dataset, \
             batch_size=batch_size, \
-            num_workers=num_workers)
+            num_workers=num_workers, shuffle=True)
     
     if torch.cuda.is_available() and device == "cuda":
         trainer = pl.Trainer(accelerator="gpu", \
@@ -119,12 +142,14 @@ def train(**kwargs):
         trainer = pl.Trainer(max_epochs=max_epochs)
 
     number_classes = len(train_dataset.classes)
-    model = VGG16Classifier(number_classes=number_classes)
+    model = VGG16Classifier(number_classes=number_classes, \
+            pretrained=pretrained)
     trainer.fit(model=model, \
             train_dataloaders=train_dataloader,\
             val_dataloaders=validation_dataloader)
 
 
+    torch.save(model.state_dict(), f"parameters/my_model_{max_epochs}.pt")
 
 
 if __name__ == "__main__":
@@ -146,6 +171,9 @@ if __name__ == "__main__":
             default=1)
     parser.add_argument("-m", "--max_epochs", type=int,\
             default=100)
+    parser.add_argument("-p", "--pretrained", type=int,\
+            default=1, \
+            help="set to 0 to train from scratch")
 
     args = parser.parse_args()
 
