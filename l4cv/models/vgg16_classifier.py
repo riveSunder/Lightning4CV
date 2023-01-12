@@ -14,7 +14,7 @@ import lightning as pl
 
 class VGG16Classifier(pl.LightningModule):
 
-    def __init__(self, number_classes=10, lr=3e-4):
+    def __init__(self, number_classes=10, lr=3e-4, dropout=0.25):
         super().__init__()
         
         self.encoder = tv_models.vgg16(weights=tv_models.VGG16_Weights.IMAGENET1K_V1).features
@@ -22,6 +22,7 @@ class VGG16Classifier(pl.LightningModule):
         self.hidden_channels = 128
         self.number_classes = number_classes
         self.lr = lr
+        self.dropout = dropout
 
 
         self.head = nn.Sequential(nn.Linear(self.num_features, self.hidden_channels),\
@@ -37,6 +38,7 @@ class VGG16Classifier(pl.LightningModule):
         assert x.shape[-2] >= 32, "minimum image dimensions 32x32"
 
         x = self.encoder(x).max(dim=-1)[0].max(dim=-1)[0]
+        x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.head(x) 
 
         return x
